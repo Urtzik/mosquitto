@@ -23,15 +23,12 @@ test : test-compile 01 02 03 04 05 06 07 08 09 10 11 12
 	./01-connect-anon-denied.py
 	./01-connect-bad-packet.py
 	./01-connect-disconnect-v5.py
-	./01-connect-duplicate-v5.py
 	./01-connect-duplicate.py
-	./01-connect-invalid-id-0-311.py
 	./01-connect-invalid-id-0.py
 	./01-connect-invalid-id-missing.py
 	./01-connect-invalid-id-utf8.py
 	./01-connect-invalid-protonum.py
 	./01-connect-invalid-reserved.py
-	./01-connect-success-v5.py
 	./01-connect-success.py
 	./01-connect-uname-invalid-utf8.py
 	./01-connect-uname-no-flag.py
@@ -56,7 +53,6 @@ endif
 	./02-subpub-qos0-subscription-id.py
 	./02-subpub-qos0-topic-alias-unknown.py
 	./02-subpub-qos0-topic-alias.py
-	./02-subpub-qos0-v5.py
 	./02-subpub-qos0.py
 	./02-subpub-qos1-bad-pubcomp.py
 	./02-subpub-qos1-bad-pubrec.py
@@ -64,7 +60,6 @@ endif
 	./02-subpub-qos1-message-expiry-will.py
 	./02-subpub-qos1-message-expiry.py
 	./02-subpub-qos1-nolocal.py
-	./02-subpub-qos1-v5.py
 	./02-subpub-qos1.py
 	./02-subpub-qos2-1322.py
 	./02-subpub-qos2-bad-puback-1.py
@@ -73,7 +68,6 @@ endif
 	./02-subpub-qos2-pubrec-error.py
 	./02-subpub-qos2-receive-maximum-1.py
 	./02-subpub-qos2-receive-maximum-2.py
-	./02-subpub-qos2-v5.py
 	./02-subpub-qos2.py
 	./02-subscribe-dollar-v5.py
 	./02-subscribe-invalid-utf8.py
@@ -85,9 +79,7 @@ endif
 	./02-unsubscribe-invalid-no-topic.py
 	./02-unsubscribe-qos0.py
 	./02-unsubscribe-qos1.py
-	./02-unsubscribe-qos2-multiple-v5.py
 	./02-unsubscribe-qos2-multiple.py
-	./02-unsubscribe-qos2-v5.py
 	./02-unsubscribe-qos2.py
 
 03 :
@@ -133,9 +125,11 @@ endif
 	./06-bridge-br2b-disconnect-qos1.py
 	./06-bridge-br2b-disconnect-qos2.py
 	./06-bridge-br2b-remapping.py
+	./06-bridge-clean-session.py
 	./06-bridge-fail-persist-resend-qos1.py
 	./06-bridge-fail-persist-resend-qos2.py
 	./06-bridge-no-local.py
+	./06-bridge-outgoing-retain.py
 	./06-bridge-per-listener-settings.py
 	./06-bridge-reconnect-local-out.py
 
@@ -153,6 +147,7 @@ endif
 	./07-will-properties.py
 	./07-will-qos0.py
 	./07-will-reconnect-1273.py
+	./07-will-takeover.py
 
 08 :
 ifeq ($(WITH_TLS),yes)

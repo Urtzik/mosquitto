@@ -120,7 +120,7 @@ static int dump__cfg_chunk_process(struct mosquitto_db *db, FILE *db_fd, uint32_
 		fclose(db_fd);
 		return rc;
 	}
-
+	
 	if(do_print) printf("DB_CHUNK_CFG:\n");
 	if(do_print) printf("\tLength: %d\n", length);
 	if(do_print) printf("\tShutdown: %d\n", chunk.shutdown);
@@ -267,10 +267,17 @@ static int dump__msg_store_chunk_process(struct mosquitto_db *db, FILE *db_fptr,
 		message_expiry_interval = 0;
 	}
 
-	rc = db__message_store(db, &chunk.source, chunk.F.source_mid,
-			chunk.topic, chunk.F.qos, chunk.F.payloadlen,
-			&chunk.payload, chunk.F.retain, &stored, message_expiry_interval,
-			chunk.properties, chunk.F.store_id, mosq_mo_client);
+	stored = mosquitto__calloc(1, sizeof(struct mosquitto_msg_store));
+	stored->source_mid = chunk.F.source_mid;
+	stored->topic = chunk.topic;
+	stored->qos = chunk.F.qos;
+	stored->retain = chunk.F.retain;
+	stored->payloadlen = chunk.F.payloadlen;
+	UHPA_MOVE(stored->payload, chunk.payload, chunk.F.payloadlen);
+	stored->properties = chunk.properties;
+
+	rc = db__message_store(db, &chunk.source, stored, message_expiry_interval,
+			chunk.F.store_id, mosq_mo_client);
 
 	mosquitto__free(chunk.source.id);
 	mosquitto__free(chunk.source.username);
@@ -402,7 +409,10 @@ int main(int argc, char *argv[])
 	}
 	memset(&db, 0, sizeof(struct mosquitto_db));
 	fd = fopen(filename, "rb");
-	if(!fd) return 0;
+	if(!fd){
+		fprintf(stderr, "Error: Unable to open %s\n", filename);
+		return 0;
+	}
 	read_e(fd, &header, 15);
 	if(!memcmp(header, magic, 15)){
 		if(do_print) printf("Mosquitto DB dump\n");

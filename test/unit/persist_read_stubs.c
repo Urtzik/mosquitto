@@ -9,7 +9,6 @@
 #include <send_mosq.h>
 #include <time_mosq.h>
 
-extern uint64_t last_retained;
 extern char *last_sub;
 extern int last_qos;
 extern uint32_t last_identifier;
@@ -28,16 +27,27 @@ struct mosquitto *context__init(struct mosquitto_db *db, mosq_sock_t sock)
 	return m;
 }
 
-int db__message_store(struct mosquitto_db *db, const struct mosquitto *source, uint16_t source_mid, char *topic, int qos, uint32_t payloadlen, mosquitto__payload_uhpa *payload, int retain, struct mosquitto_msg_store **stored, uint32_t message_expiry_interval, mosquitto_property *properties, dbid_t store_id, enum mosquitto_msg_origin origin)
+void db__msg_store_free(struct mosquitto_msg_store *store)
 {
-    struct mosquitto_msg_store *temp = NULL;
-    int rc = MOSQ_ERR_SUCCESS;
+	int i;
 
-    temp = mosquitto__calloc(1, sizeof(struct mosquitto_msg_store));
-    if(!temp){
-        rc = MOSQ_ERR_NOMEM;
-        goto error;
-    }
+	mosquitto__free(store->source_id);
+	mosquitto__free(store->source_username);
+	if(store->dest_ids){
+		for(i=0; i<store->dest_id_count; i++){
+			mosquitto__free(store->dest_ids[i]);
+		}
+		mosquitto__free(store->dest_ids);
+	}
+	mosquitto__free(store->topic);
+	mosquitto_property_free_all(&store->properties);
+	UHPA_FREE_PAYLOAD(store);
+	mosquitto__free(store);
+}
+
+int db__message_store(struct mosquitto_db *db, const struct mosquitto *source, struct mosquitto_msg_store *temp, struct mosquitto_msg_store **stored, uint32_t message_expiry_interval, dbid_t store_id, enum mosquitto_msg_origin origin)
+{
+    int rc = MOSQ_ERR_SUCCESS;
 
     if(source && source->id){
         temp->source_id = mosquitto__strdup(source->id);
@@ -59,19 +69,7 @@ int db__message_store(struct mosquitto_db *db, const struct mosquitto *source, u
     if(source){
         temp->source_listener = source->listener;
     }
-    temp->source_mid = source_mid;
     temp->mid = 0;
-    temp->qos = qos;
-    temp->retain = retain;
-    temp->topic = topic;
-    topic = NULL;
-    temp->payloadlen = payloadlen;
-    temp->properties = properties;
-    if(payloadlen){
-        UHPA_MOVE(temp->payload, *payload, payloadlen);
-    }else{
-        temp->payload.ptr = NULL;
-    }
     if(message_expiry_interval > 0){
         temp->message_expiry_time = time(NULL) + message_expiry_interval;
     }else{
@@ -81,7 +79,7 @@ int db__message_store(struct mosquitto_db *db, const struct mosquitto *source, u
     temp->dest_ids = NULL;
     temp->dest_id_count = 0;
     db->msg_store_count++;
-    db->msg_store_bytes += payloadlen;
+    db->msg_store_bytes += temp->payloadlen;
     (*stored) = temp;
 
     if(!store_id){
@@ -94,14 +92,7 @@ int db__message_store(struct mosquitto_db *db, const struct mosquitto *source, u
 
     return MOSQ_ERR_SUCCESS;
 error:
-    mosquitto__free(topic);
-    if(temp){
-        mosquitto__free(temp->source_id);
-        mosquitto__free(temp->source_username);
-        mosquitto__free(temp->topic);
-        mosquitto__free(temp);
-    }
-    UHPA_FREE(*payload, payloadlen);
+	db__msg_store_free(temp);
     return rc;
 }
 
@@ -125,6 +116,17 @@ int send__pingreq(struct mosquitto *mosq)
 	return MOSQ_ERR_SUCCESS;
 }
 
+int mosquitto_acl_check(struct mosquitto_db *db, struct mosquitto *context, const char *topic, long payloadlen, void* payload, int qos, bool retain, int access)
+{
+	return MOSQ_ERR_SUCCESS;
+}
+
+int acl__find_acls(struct mosquitto_db *db, struct mosquitto *context)
+{
+	return MOSQ_ERR_SUCCESS;
+}
+
+
 int sub__add(struct mosquitto_db *db, struct mosquitto *context, const char *sub, int qos, uint32_t identifier, int options, struct mosquitto__subhier **root)
 {
 	last_sub = strdup(sub);
@@ -134,14 +136,14 @@ int sub__add(struct mosquitto_db *db, struct mosquitto *context, const char *sub
 	return MOSQ_ERR_SUCCESS;
 }
 
-int sub__messages_queue(struct mosquitto_db *db, const char *source_id, const char *topic, int qos, int retain, struct mosquitto_msg_store **stored)
+int db__message_insert(struct mosquitto_db *db, struct mosquitto *context, uint16_t mid, enum mosquitto_msg_direction dir, int qos, bool retain, struct mosquitto_msg_store *stored, mosquitto_property *properties)
 {
-	if(retain){
-		last_retained = (*stored)->db_id;
-	}
 	return MOSQ_ERR_SUCCESS;
 }
 
+void db__msg_store_ref_dec(struct mosquitto_db *db, struct mosquitto_msg_store **store)
+{
+}
 
 void db__msg_store_ref_inc(struct mosquitto_msg_store *store)
 {

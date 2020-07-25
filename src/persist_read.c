@@ -121,6 +121,12 @@ static int persist__client_msg_restore(struct mosquitto_db *db, struct P_client_
 		return MOSQ_ERR_SUCCESS;
 	}
 
+	context = persist__find_or_add_context(db, chunk->client_id, 0);
+	if(!context){
+		log__printf(NULL, MOSQ_LOG_WARNING, "Warning: Persistence file contains client message with no matching client. File may be corrupt.");
+		return 0;
+	}
+
 	cmsg = mosquitto__calloc(1, sizeof(struct mosquitto_client_msg));
 	if(!cmsg){
 		log__printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
@@ -140,13 +146,6 @@ static int persist__client_msg_restore(struct mosquitto_db *db, struct P_client_
 
 	cmsg->store = load->store;
 	db__msg_store_ref_inc(cmsg->store);
-
-	context = persist__find_or_add_context(db, chunk->client_id, 0);
-	if(!context){
-		mosquitto__free(cmsg);
-		log__printf(NULL, MOSQ_LOG_ERR, "Error restoring persistent database, message store corrupt.");
-		return 1;
-	}
 
 	if(cmsg->direction == mosq_md_out){
 		msg_data = &context->msgs_out;
@@ -186,9 +185,13 @@ static int persist__client_chunk_restore(struct mosquitto_db *db, FILE *db_fptr)
 	}else{
 		rc = persist__chunk_client_read_v234(db_fptr, &chunk, db_version);
 	}
-	if(rc){
+	if(rc > 0){
 		fclose(db_fptr);
 		return rc;
+	}else if(rc < 0){
+		/* Client not loaded, but otherwise not an error */
+		log__printf(NULL, MOSQ_LOG_WARNING, "Warning: Empty client entry found in persistence database, it may be corrupt.");
+		return MOSQ_ERR_SUCCESS;
 	}
 
 	context = persist__find_or_add_context(db, chunk.client_id, chunk.F.last_mid);
@@ -288,10 +291,28 @@ static int persist__msg_store_chunk_restore(struct mosquitto_db *db, FILE *db_fp
 		message_expiry_interval = 0;
 	}
 
-	rc = db__message_store(db, &chunk.source, chunk.F.source_mid,
-			chunk.topic, chunk.F.qos, chunk.F.payloadlen,
-			&chunk.payload, chunk.F.retain, &stored, message_expiry_interval,
-			chunk.properties, chunk.F.store_id, mosq_mo_client);
+	stored = mosquitto__calloc(1, sizeof(struct mosquitto_msg_store));
+	if(stored == NULL){
+		fclose(db_fptr);
+		mosquitto__free(chunk.source.id);
+		mosquitto__free(chunk.source.username);
+		mosquitto__free(chunk.topic);
+		UHPA_FREE(chunk.payload, chunk.F.payloadlen);
+		log__printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
+		return MOSQ_ERR_NOMEM;
+	}
+	stored->ref_count = 1;
+
+	stored->source_mid = chunk.F.source_mid;
+	stored->topic = chunk.topic;
+	stored->qos = chunk.F.qos;
+	stored->payloadlen = chunk.F.payloadlen;
+	stored->retain = chunk.F.retain;
+	stored->properties = chunk.properties;
+	UHPA_MOVE(stored->payload, chunk.payload, stored->payloadlen);
+
+	rc = db__message_store(db, &chunk.source, stored, message_expiry_interval,
+			chunk.F.store_id, mosq_mo_client);
 
 	mosquitto__free(chunk.source.id);
 	mosquitto__free(chunk.source.username);
@@ -317,6 +338,8 @@ static int persist__retain_chunk_restore(struct mosquitto_db *db, FILE *db_fptr)
 	struct mosquitto_msg_store_load *load;
 	struct P_retain chunk;
 	int rc;
+	char **split_topics;
+	char *local_topic;
 
 	memset(&chunk, 0, sizeof(struct P_retain));
 
@@ -332,7 +355,10 @@ static int persist__retain_chunk_restore(struct mosquitto_db *db, FILE *db_fptr)
 
 	HASH_FIND(hh, db->msg_store_load, &chunk.F.store_id, sizeof(dbid_t), load);
 	if(load){
-		sub__messages_queue(db, NULL, load->store->topic, load->store->qos, load->store->retain, &load->store);
+		if(sub__topic_tokenise(load->store->topic, &local_topic, &split_topics, NULL)) return 1;
+		retain__store(db, load->store->topic, load->store, split_topics);
+		mosquitto__free(local_topic);
+		mosquitto__free(split_topics);
 	}else{
 		/* Can't find the message - probably expired */
 	}

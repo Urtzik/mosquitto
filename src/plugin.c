@@ -20,6 +20,7 @@ Contributors:
 #include "mosquitto_internal.h"
 #include "mosquitto_broker.h"
 #include "memory_mosq.h"
+#include "utlist.h"
 
 #ifdef WITH_TLS
 #  include <openssl/ssl.h>
@@ -76,6 +77,21 @@ int mosquitto_client_protocol(const struct mosquitto *client)
 }
 
 
+int mosquitto_client_protocol_version(const struct mosquitto *client)
+{
+	switch(client->protocol){
+		case mosq_p_mqtt31:
+			return 3;
+		case mosq_p_mqtt311:
+			return 4;
+		case mosq_p_mqtt5:
+			return 5;
+		default:
+			return 0;
+	}
+}
+
+
 int mosquitto_client_sub_count(const struct mosquitto *client)
 {
 	return client->sub_count;
@@ -93,6 +109,39 @@ const char *mosquitto_client_username(const struct mosquitto *context)
 		return context->username;
 	}
 }
+
+
+int mosquitto_plugin_publish(
+		const char *topic,
+		int payloadlen,
+		const void *payload,
+		int qos,
+		bool retain,
+		mosquitto_property *properties)
+{
+	struct mosquitto_message_v5 *msg;
+	struct mosquitto_db *db;
+
+	msg = mosquitto__malloc(sizeof(struct mosquitto_message_v5));
+	if(msg == NULL) return MOSQ_ERR_NOMEM;
+	
+	msg->next = NULL;
+	msg->prev = NULL;
+	msg->topic = mosquitto__strdup(topic);
+	msg->payloadlen = payloadlen;
+	msg->payload = mosquitto__calloc(1, payloadlen+1);
+	memcpy(msg->payload, payload, payloadlen);
+	msg->qos = qos;
+	msg->retain = retain;
+	msg->properties = properties;
+
+	db = mosquitto__get_db();
+
+	DL_APPEND(db->plugin_msgs, msg);
+
+	return MOSQ_ERR_SUCCESS;
+}
+
 
 int mosquitto_set_username(struct mosquitto *client, const char *username)
 {

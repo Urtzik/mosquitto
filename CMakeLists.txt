@@ -13,6 +13,8 @@ cmake_minimum_required(VERSION 2.8)
 
 set (VERSION 1.6.10)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+
 add_definitions (-DCMAKE -DVERSION=\"${VERSION}\")
 
 if (WIN32)
@@ -43,6 +45,12 @@ if (WITH_TLS)
 else (WITH_TLS)
 	set (OPENSSL_INCLUDE_DIR "")
 endif (WITH_TLS)
+
+
+option(WITH_UNIX_SOCKETS "Include Unix Domain Socket support?" ON)
+if (WITH_UNIX_SOCKETS AND NOT WIN32)
+	add_definitions("-DWITH_UNIX_SOCKETS")
+endif (WITH_UNIX_SOCKETS AND NOT WIN32)
 
 option(WITH_SOCKS "Include SOCKS5 support?" ON)
 if (WITH_SOCKS)
@@ -93,9 +101,17 @@ endif (WITH_DLT)
 # Include projects
 # ========================================
 
+option(WITH_CLIENTS "Build clients?" ON)
+option(WITH_BROKER "Build broker?" ON)
+
 add_subdirectory(lib)
-add_subdirectory(client)
+if (WITH_CLIENTS)
+	add_subdirectory(client)
+endif (WITH_CLIENTS)
+if (WITH_BROKER)
 add_subdirectory(src)
+endif (WITH_BROKER)
+
 if (DOCUMENTATION)
 	add_subdirectory(man)
 endif (DOCUMENTATION)

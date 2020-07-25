@@ -60,6 +60,8 @@ def start_broker(filename, cmd=None, port=0, use_conf=False, expect_fail=False):
             return broker
 
     if expect_fail == False:
+        outs, errs = broker.communicate(timeout=1)
+        print("FAIL: unable to start broker: %s" % errs)
         raise IOError
     else:
         return None
@@ -115,6 +117,22 @@ def do_send_receive(sock, send_packet, receive_packet, error_string="send receiv
         total_sent += sent
 
     if expect_packet(sock, error_string, receive_packet):
+        return sock
+    else:
+        sock.close()
+        raise ValueError
+
+
+# Useful for mocking a client receiving (with ack) a qos1 publish
+def do_receive_send(sock, receive_packet, send_packet, error_string="receive send error"):
+    if expect_packet(sock, error_string, receive_packet):
+        size = len(send_packet)
+        total_sent = 0
+        while total_sent < size:
+            sent = sock.send(send_packet[total_sent:])
+            if sent == 0:
+                raise RuntimeError("socket connection broken")
+            total_sent += sent
         return sock
     else:
         sock.close()
@@ -322,7 +340,7 @@ def to_string(packet):
         (cmd, rl) = struct.unpack('!BB', packet)
         return "AUTH, rl="+str(rl)
 
-def gen_connect(client_id, clean_session=True, keepalive=60, username=None, password=None, will_topic=None, will_qos=0, will_retain=False, will_payload=b"", proto_ver=4, connect_reserved=False, properties=b"", will_properties=b""):
+def gen_connect(client_id, clean_session=True, keepalive=60, username=None, password=None, will_topic=None, will_qos=0, will_retain=False, will_payload=b"", proto_ver=4, connect_reserved=False, properties=b"", will_properties=b"", session_expiry=-1):
     if (proto_ver&0x7F) == 3 or proto_ver == 0:
         remaining_length = 12
     elif (proto_ver&0x7F) == 4 or proto_ver == 5:
@@ -347,6 +365,10 @@ def gen_connect(client_id, clean_session=True, keepalive=60, username=None, pass
     if proto_ver == 5:
         if properties == b"":
             properties += mqtt5_props.gen_uint16_prop(mqtt5_props.PROP_RECEIVE_MAXIMUM, 20)
+
+        if session_expiry != -1:
+            properties += mqtt5_props.gen_uint32_prop(mqtt5_props.PROP_SESSION_EXPIRY_INTERVAL, session_expiry)
+
         properties = mqtt5_props.prop_finalise(properties)
         remaining_length += len(properties)
 

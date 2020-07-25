@@ -185,12 +185,18 @@ void my_connect_callback(struct mosquitto *mosq, void *obj, int result, int flag
 
 void my_publish_callback(struct mosquitto *mosq, void *obj, int mid, int reason_code, const mosquitto_property *properties)
 {
+	char *reason_string = NULL;
 	UNUSED(obj);
 	UNUSED(properties);
 
 	last_mid_sent = mid;
 	if(reason_code > 127){
 		err_printf(&cfg, "Warning: Publish %d failed: %s.\n", mid, mosquitto_reason_string(reason_code));
+		mosquitto_property_read_string(properties, MQTT_PROP_REASON_STRING, &reason_string, false);
+		if(reason_string){
+			err_printf(&cfg, "%s\n", reason_string);
+			free(reason_string);
+		}
 	}
 	publish_count++;
 
@@ -367,13 +373,13 @@ void print_usage(void)
 	mosquitto_lib_version(&major, &minor, &revision);
 	printf("mosquitto_pub is a simple mqtt client that will publish a message on a single topic and exit.\n");
 	printf("mosquitto_pub version %s running on libmosquitto %d.%d.%d.\n\n", VERSION, major, minor, revision);
-	printf("Usage: mosquitto_pub {[-h host] [-p port] [-u username] [-P password] -t topic | -L URL}\n");
+	printf("Usage: mosquitto_pub {[-h host] [--unix path] [-p port] [-u username] [-P password] -t topic | -L URL}\n");
 	printf("                     {-f file | -l | -n | -m message}\n");
-	printf("                     [-c] [-k keepalive] [-q qos] [-r] [--repeat N] [--repeat-delay time]\n");
+	printf("                     [-c] [-k keepalive] [-q qos] [-r] [--repeat N] [--repeat-delay time] [-x session-expiry]\n");
 #ifdef WITH_SRV
-	printf("                     [-A bind_address] [-S]\n");
+	printf("                     [-A bind_address] [--nodelay] [-S]\n");
 #else
-	printf("                     [-A bind_address]\n");
+	printf("                     [-A bind_address] [--nodelay]\n");
 #endif
 	printf("                     [-i id] [-I id_prefix]\n");
 	printf("                     [-d] [--quiet]\n");
@@ -398,6 +404,11 @@ void print_usage(void)
 	printf(" -A : bind the outgoing socket to this host/ip address. Use to control which interface\n");
 	printf("      the client communicates over.\n");
 	printf(" -d : enable debug messages.\n");
+	printf(" -c : disable clean session/enable persistent client mode\n");
+	printf("      When this argument is used, the broker will be instructed not to clean existing sessions\n");
+	printf("      for the same client id when the client connects, and sessions will never expire when the\n");
+	printf("      client disconnects. MQTT v5 clients can change their session expiry interval with the -x\n");
+	printf("      argument.\n");
 	printf(" -D : Define MQTT v5 properties. See the documentation for more details.\n");
 	printf(" -f : send the contents of a file as the message.\n");
 	printf(" -h : mqtt host to connect to. Defaults to localhost.\n");
@@ -423,10 +434,18 @@ void print_usage(void)
 	printf(" -u : provide a username\n");
 	printf(" -V : specify the version of the MQTT protocol to use when connecting.\n");
 	printf("      Can be mqttv5, mqttv311 or mqttv31. Defaults to mqttv311.\n");
+	printf(" -x : Set the session-expiry-interval property on the CONNECT packet. Applies to MQTT v5\n");
+	printf("      clients only. Set to 0-4294967294 to specify the session will expire in that many\n");
+	printf("      seconds after the client disconnects, or use -1, 4294967295, or ∞ for a session\n");
+	printf("      that does not expire. Defaults to -1 if -c is also given, or 0 if -c not given.\n");
 	printf(" --help : display this message.\n");
+	printf(" --nodelay : disable Nagle's algorithm, to reduce socket sending latency at the possible\n");
+	printf("             expense of more packets being sent.\n");
+	printf(" --quiet : don't print error messages.\n");
 	printf(" --repeat : if publish mode is -f, -m, or -s, then repeat the publish N times.\n");
 	printf(" --repeat-delay : if using --repeat, wait time seconds between publishes. Defaults to 0.\n");
-	printf(" --quiet : don't print error messages.\n");
+	printf(" --unix : connect to a broker through a unix domain socket instead of a TCP socket,\n");
+	printf("          e.g. /tmp/mosquitto.sock\n");
 	printf(" --will-payload : payload for the client Will, which is sent by the broker in case of\n");
 	printf("                  unexpected disconnection. If not given and will-topic is set, a zero\n");
 	printf("                  length message will be sent.\n");

@@ -24,6 +24,7 @@ extern "C" {
 #include <stdbool.h>
 
 struct mosquitto;
+typedef struct mqtt5__property mosquitto_property;
 
 enum mosquitto_protocol {
 	mp_mqtt,
@@ -131,6 +132,18 @@ int mosquitto_client_protocol(const struct mosquitto *client);
 
 
 /*
+ * Function: mosquitto_client_protocol_version
+ *
+ * Retrieve the MQTT protocol version with which the client has connected. Can be one of:
+ *
+ * 3 - for MQTT v3 / v3.1
+ * 4 - for MQTT v3.1.1
+ * 5 - for MQTT v5
+ */
+int mosquitto_client_protocol_version(const struct mosquitto *client);
+
+
+/*
  * Function: mosquitto_client_sub_count
  *
  * Retrieve the number of subscriptions that have been made by a client.
@@ -164,6 +177,25 @@ const char *mosquitto_client_username(const struct mosquitto *client);
  *   MOSQ_ERR_NOMEM - on out of memory
  */
 int mosquitto_set_username(struct mosquitto *client, const char *username);
+
+
+/* Function: mosquitto_plugin_publish
+ *
+ * Publish a message from within a plugin.
+ *
+ * This function allows a plugin to publish a message. Messages published in
+ * this way are treated as coming from the broker and so will not be passed to
+ * `mosquitto_auth_acl_check(, MOSQ_ACL_WRITE, , )` for checking. Read access
+ * will be enforced as normal for individual clients when they are due to
+ * receive the message.
+ */
+int mosquitto_plugin_publish(
+		const char *topic,
+		int payloadlen,
+		const void *payload,
+		int qos,
+		bool retain,
+		mosquitto_property *properties);
 
 #ifdef __cplusplus
 }

@@ -65,7 +65,7 @@ int send__pingresp(struct mosquitto *mosq)
 	return send__simple_command(mosq, CMD_PINGRESP);
 }
 
-int send__puback(struct mosquitto *mosq, uint16_t mid, uint8_t reason_code)
+int send__puback(struct mosquitto *mosq, uint16_t mid, uint8_t reason_code, const mosquitto_property *properties)
 {
 #ifdef WITH_BROKER
 	log__printf(NULL, MOSQ_LOG_DEBUG, "Sending PUBACK to %s (m%d, rc%d)", mosq->id, mid, reason_code);
@@ -74,10 +74,10 @@ int send__puback(struct mosquitto *mosq, uint16_t mid, uint8_t reason_code)
 #endif
 	util__increment_receive_quota(mosq);
 	/* We don't use Reason String or User Property yet. */
-	return send__command_with_mid(mosq, CMD_PUBACK, mid, false, reason_code, NULL);
+	return send__command_with_mid(mosq, CMD_PUBACK, mid, false, reason_code, properties);
 }
 
-int send__pubcomp(struct mosquitto *mosq, uint16_t mid)
+int send__pubcomp(struct mosquitto *mosq, uint16_t mid, const mosquitto_property *properties)
 {
 #ifdef WITH_BROKER
 	log__printf(NULL, MOSQ_LOG_DEBUG, "Sending PUBCOMP to %s (m%d)", mosq->id, mid);
@@ -86,11 +86,11 @@ int send__pubcomp(struct mosquitto *mosq, uint16_t mid)
 #endif
 	util__increment_receive_quota(mosq);
 	/* We don't use Reason String or User Property yet. */
-	return send__command_with_mid(mosq, CMD_PUBCOMP, mid, false, 0, NULL);
+	return send__command_with_mid(mosq, CMD_PUBCOMP, mid, false, 0, properties);
 }
 
 
-int send__pubrec(struct mosquitto *mosq, uint16_t mid, uint8_t reason_code)
+int send__pubrec(struct mosquitto *mosq, uint16_t mid, uint8_t reason_code, const mosquitto_property *properties)
 {
 #ifdef WITH_BROKER
 	log__printf(NULL, MOSQ_LOG_DEBUG, "Sending PUBREC to %s (m%d, rc%d)", mosq->id, mid, reason_code);
@@ -101,10 +101,10 @@ int send__pubrec(struct mosquitto *mosq, uint16_t mid, uint8_t reason_code)
 		util__increment_receive_quota(mosq);
 	}
 	/* We don't use Reason String or User Property yet. */
-	return send__command_with_mid(mosq, CMD_PUBREC, mid, false, reason_code, NULL);
+	return send__command_with_mid(mosq, CMD_PUBREC, mid, false, reason_code, properties);
 }
 
-int send__pubrel(struct mosquitto *mosq, uint16_t mid)
+int send__pubrel(struct mosquitto *mosq, uint16_t mid, const mosquitto_property *properties)
 {
 #ifdef WITH_BROKER
 	log__printf(NULL, MOSQ_LOG_DEBUG, "Sending PUBREL to %s (m%d)", mosq->id, mid);
@@ -112,7 +112,7 @@ int send__pubrel(struct mosquitto *mosq, uint16_t mid)
 	log__printf(mosq, MOSQ_LOG_DEBUG, "Client %s sending PUBREL (m%d)", mosq->id, mid);
 #endif
 	/* We don't use Reason String or User Property yet. */
-	return send__command_with_mid(mosq, CMD_PUBREL|2, mid, false, 0, NULL);
+	return send__command_with_mid(mosq, CMD_PUBREL|2, mid, false, 0, properties);
 }
 
 /* For PUBACK, PUBCOMP, PUBREC, and PUBREL */
@@ -120,7 +120,6 @@ int send__command_with_mid(struct mosquitto *mosq, uint8_t command, uint16_t mid
 {
 	struct mosquitto__packet *packet = NULL;
 	int rc;
-	int proplen, varbytes;
 
 	assert(mosq);
 	packet = mosquitto__calloc(1, sizeof(struct mosquitto__packet));
@@ -138,9 +137,7 @@ int send__command_with_mid(struct mosquitto *mosq, uint8_t command, uint16_t mid
 		}
 
 		if(properties){
-			proplen = property__get_length_all(properties);
-			varbytes = packet__varint_bytes(proplen);
-			packet->remaining_length += varbytes + proplen;
+			packet->remaining_length += property__get_remaining_length(properties);
 		}
 	}
 

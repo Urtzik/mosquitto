@@ -102,6 +102,12 @@ WITH_BUNDLED_DEPS:=yes
 # Build with coverage options
 WITH_COVERAGE:=no
 
+# Build with unix domain socket support
+WITH_UNIX_SOCKETS:=yes
+
+# Build mosquitto_sub with cJSON support
+WITH_CJSON:=yes
+
 # =============================================================================
 # End of user configuration
 # =============================================================================
@@ -282,6 +288,12 @@ ifeq ($(WITH_DOCS),yes)
 	MAKE_ALL:=$(MAKE_ALL) docs
 endif
 
+ifeq ($(WITH_UNIX_SOCKETS),yes)
+	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_UNIX_SOCKETS
+	LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_UNIX_SOCKETS
+	CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_UNIX_SOCKETS
+endif
+
 ifeq ($(WITH_WEBSOCKETS),yes)
 	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_WEBSOCKETS
 	BROKER_LDADD:=$(BROKER_LDADD) -lwebsockets
@@ -321,6 +333,11 @@ ifeq ($(WITH_COVERAGE),yes)
 	LIB_LDFLAGS:=$(LIB_LDFLAGS) -coverage
 	CLIENT_CFLAGS:=$(CLIENT_CFLAGS) -coverage
 	CLIENT_LDFLAGS:=$(CLIENT_LDFLAGS) -coverage
+endif
+
+ifeq ($(WITH_CJSON),yes)
+	CLIENT_CFLAGS:=$(CLIENT_CFLAGS) -DWITH_CJSON -I/usr/include/cjson
+	CLIENT_LDADD:=$(CLIENT_LDADD) -lcjson
 endif
 
 BROKER_LDADD:=${BROKER_LDADD} ${LDADD}

@@ -15,6 +15,7 @@ OBJS = \
 	   send_disconnect.o \
 	   stubs.o \
 	   time_mosq.o \
+	   topic_tok.o \
 	   utf8_mosq.o
 
 .PHONY: all clean reallyclean

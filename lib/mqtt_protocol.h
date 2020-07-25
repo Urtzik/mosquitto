@@ -105,6 +105,38 @@ enum mqtt5_return_codes {
 	MQTT_RC_WILDCARD_SUBS_NOT_SUPPORTED = 162,	/* SUBACK, DISCONNECT */
 };
 
+/* Enum: mqtt5_property
+ * Options for use with MQTTv5 properties.
+ * Options:
+ *
+ *	MQTT_PROP_PAYLOAD_FORMAT_INDICATOR - property option.
+ *	MQTT_PROP_MESSAGE_EXPIRY_INTERVAL - property option.
+ *	MQTT_PROP_CONTENT_TYPE - property option.
+ *	MQTT_PROP_RESPONSE_TOPIC - property option.
+ *	MQTT_PROP_CORRELATION_DATA - property option.
+ *	MQTT_PROP_SUBSCRIPTION_IDENTIFIER - property option.
+ *	MQTT_PROP_SESSION_EXPIRY_INTERVAL - property option.
+ *	MQTT_PROP_ASSIGNED_CLIENT_IDENTIFIER - property option.
+ *	MQTT_PROP_SERVER_KEEP_ALIVE - property option.
+ *	MQTT_PROP_AUTHENTICATION_METHOD - property option.
+ *	MQTT_PROP_AUTHENTICATION_DATA - property option.
+ *	MQTT_PROP_REQUEST_PROBLEM_INFORMATION - property option.
+ *	MQTT_PROP_WILL_DELAY_INTERVAL - property option.
+ *	MQTT_PROP_REQUEST_RESPONSE_INFORMATION - property option.
+ *	MQTT_PROP_RESPONSE_INFORMATION - property option.
+ *	MQTT_PROP_SERVER_REFERENCE - property option.
+ *	MQTT_PROP_REASON_STRING - property option.
+ *	MQTT_PROP_RECEIVE_MAXIMUM - property option.
+ *	MQTT_PROP_TOPIC_ALIAS_MAXIMUM - property option.
+ *	MQTT_PROP_TOPIC_ALIAS - property option.
+ *	MQTT_PROP_MAXIMUM_QOS - property option.
+ *	MQTT_PROP_RETAIN_AVAILABLE - property option.
+ *	MQTT_PROP_USER_PROPERTY - property option.
+ *	MQTT_PROP_MAXIMUM_PACKET_SIZE - property option.
+ *	MQTT_PROP_WILDCARD_SUB_AVAILABLE - property option.
+ *	MQTT_PROP_SUBSCRIPTION_ID_AVAILABLE - property option.
+ *	MQTT_PROP_SHARED_SUB_AVAILABLE - property option.
+ */
 enum mqtt5_property {
 	MQTT_PROP_PAYLOAD_FORMAT_INDICATOR = 1,		/* Byte :				PUBLISH, Will Properties */
 	MQTT_PROP_MESSAGE_EXPIRY_INTERVAL = 2,		/* 4 byte int :			PUBLISH, Will Properties */
@@ -145,6 +177,30 @@ enum mqtt5_property_type {
 	MQTT_PROP_TYPE_STRING_PAIR = 7
 };
 
+/* Enum: mqtt5_sub_options
+ * Options for use with MQTTv5 subscriptions.
+ *
+ * MQTT_SUB_OPT_NO_LOCAL - with this option set, if this client publishes to
+ * a topic to which it is subscribed, the broker will not publish the
+ * message back to the client.
+ *
+ * MQTT_SUB_OPT_RETAIN_AS_PUBLISHED - with this option set, messages
+ * published for this subscription will keep the retain flag as was set by
+ * the publishing client. The default behaviour without this option set has
+ * the retain flag indicating whether a message is fresh/stale.
+ *
+ * MQTT_SUB_OPT_SEND_RETAIN_ALWAYS - with this option set, pre-existing
+ * retained messages are sent as soon as the subscription is made, even
+ * if the subscription already exists. This is the default behaviour, so
+ * it is not necessary to set this option.
+ *
+ * MQTT_SUB_OPT_SEND_RETAIN_NEW - with this option set, pre-existing retained
+ * messages for this subscription will be sent when the subscription is made,
+ * but only if the subscription does not already exist.
+ *
+ * MQTT_SUB_OPT_SEND_RETAIN_NEVER - with this option set, pre-existing
+ * retained messages will never be sent for this subscription.
+ */
 enum mqtt5_sub_options {
 	MQTT_SUB_OPT_NO_LOCAL = 0x04,
 	MQTT_SUB_OPT_RETAIN_AS_PUBLISHED = 0x08,

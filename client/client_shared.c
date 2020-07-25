@@ -57,16 +57,32 @@ static int check_format(const char *str)
 			}else{
 				if(str[i+1] == '%'){
 					// Print %, ignore
+				}else if(str[i+1] == 'A'){
+					// MQTT v5 property topic-alias
+				}else if(str[i+1] == 'C'){
+					// MQTT v5 property content-type
+				}else if(str[i+1] == 'D'){
+					// MQTT v5 property correlation-data
+				}else if(str[i+1] == 'E'){
+					// MQTT v5 property message-expiry-interval
+				}else if(str[i+1] == 'F'){
+					// MQTT v5 property payload-format-indicator
 				}else if(str[i+1] == 'I'){
 					// ISO 8601 date+time
 				}else if(str[i+1] == 'l'){
 					// payload length
 				}else if(str[i+1] == 'm'){
 					// mid
+				}else if(str[i+1] == 'P'){
+					// MQTT v5 property user-property
 				}else if(str[i+1] == 'p'){
 					// payload
 				}else if(str[i+1] == 'q'){
 					// qos
+				}else if(str[i+1] == 'R'){
+					// MQTT v5 property response-topic
+				}else if(str[i+1] == 'S'){
+					// MQTT v5 property subscription-identifier
 				}else if(str[i+1] == 'r'){
 					// retain
 				}else if(str[i+1] == 't'){
@@ -125,7 +141,7 @@ static int check_format(const char *str)
 void init_config(struct mosq_config *cfg, int pub_or_sub)
 {
 	memset(cfg, 0, sizeof(*cfg));
-	cfg->port = -1;
+	cfg->port = PORT_UNDEFINED;
 	cfg->max_inflight = 20;
 	cfg->keepalive = 60;
 	cfg->clean_session = true;
@@ -133,6 +149,7 @@ void init_config(struct mosq_config *cfg, int pub_or_sub)
 	cfg->repeat_count = 1;
 	cfg->repeat_delay.tv_sec = 0;
 	cfg->repeat_delay.tv_usec = 0;
+	cfg->random_filter = 10000;
 	if(pub_or_sub == CLIENT_RR){
 		cfg->protocol_version = MQTT_PROTOCOL_V5;
 		cfg->msg_count = 1;
@@ -756,6 +773,8 @@ int client_config_line_proc(struct mosq_config *cfg, int pub_or_sub, int argc, c
 				cfg->max_inflight = (unsigned int )tmpi;
 			}
 			i++;
+		}else if(!strcmp(argv[i], "--nodelay")){
+			cfg->tcp_nodelay = true;
 		}else if(!strcmp(argv[i], "-n") || !strcmp(argv[i], "--null-message")){
 			if(pub_or_sub == CLIENT_SUB){
 				goto unknown_option;
@@ -777,12 +796,17 @@ int client_config_line_proc(struct mosq_config *cfg, int pub_or_sub, int argc, c
 				return 1;
 			}else{
 				cfg->port = atoi(argv[i+1]);
-				if(cfg->port<1 || cfg->port>65535){
+				if(cfg->port<0 || cfg->port>65535){
 					fprintf(stderr, "Error: Invalid port given: %d\n", cfg->port);
 					return 1;
 				}
 			}
 			i++;
+		}else if(!strcmp(argv[i], "--pretty")){
+			if(pub_or_sub == CLIENT_PUB){
+				goto unknown_option;
+			}
+			cfg->pretty = true;
 		}else if(!strcmp(argv[i], "-P") || !strcmp(argv[i], "--pw")){
 			if(i==argc-1){
 				fprintf(stderr, "Error: -P argument given but no password specified.\n\n");
@@ -846,6 +870,21 @@ int client_config_line_proc(struct mosq_config *cfg, int pub_or_sub, int argc, c
 			}
 			cfg->no_retain = true;
 			cfg->sub_opts |= MQTT_SUB_OPT_SEND_RETAIN_NEVER;
+		}else if(!strcmp(argv[i], "--random-filter")){
+			if(pub_or_sub != CLIENT_SUB){
+				goto unknown_option;
+			}
+			if(i==argc-1){
+				fprintf(stderr, "Error: --random-filter argument given but no chance specified.\n\n");
+				return 1;
+			}else{
+				cfg->random_filter = 10.0*atof(argv[i+1]);
+				if(cfg->random_filter > 10000 || cfg->random_filter < 1){
+					fprintf(stderr, "Error: --random-filter chance must be between 0.1-100.0\n\n");
+					return 1;
+				}
+			}
+			i++;
 		}else if(!strcmp(argv[i], "--remove-retained")){
 			if(pub_or_sub != CLIENT_SUB){
 				goto unknown_option;
@@ -1009,6 +1048,15 @@ int client_config_line_proc(struct mosq_config *cfg, int pub_or_sub, int argc, c
 				cfg->username = strdup(argv[i+1]);
 			}
 			i++;
+		}else if(!strcmp(argv[i], "--unix")){
+			if(i==argc-1){
+				fprintf(stderr, "Error: --unix argument given but no socket path specified.\n\n");
+				return 1;
+			}else{
+				cfg->host = strdup(argv[i+1]);
+				cfg->port = 0;
+			}
+			i++;
 		}else if(!strcmp(argv[i], "-V") || !strcmp(argv[i], "--protocol-version")){
 			if(i==argc-1){
 				fprintf(stderr, "Error: --protocol-version argument given but no version specified.\n\n");
@@ -1085,6 +1133,32 @@ int client_config_line_proc(struct mosq_config *cfg, int pub_or_sub, int argc, c
 					return 1;
 				}
 				cfg->will_topic = strdup(argv[i+1]);
+			}
+			i++;
+		}else if(!strcmp(argv[i], "-x")){
+			if(i==argc-1){
+				fprintf(stderr, "Error: -x argument given but no session expiry interval specified.\n\n");
+				return 1;
+			}else{
+				if(!strcmp(argv[i+1], "∞")){
+					cfg->session_expiry_interval = UINT32_MAX;
+				}else{
+					char *endptr = NULL;
+					cfg->session_expiry_interval = strtol(argv[i+1], &endptr, 0);
+					if(endptr == argv[i+1] || endptr[0] != '\0'){
+						/* Entirety of argument wasn't a number */
+						fprintf(stderr, "Error: session-expiry-interval not a number.\n\n");
+						return 1;
+					}
+					if(cfg->session_expiry_interval > UINT32_MAX || cfg->session_expiry_interval < -1){
+						fprintf(stderr, "Error: session-expiry-interval out of range.\n\n");
+						return 1;
+					}
+					if(cfg->session_expiry_interval == -1){
+						/* Convenience value for infinity. */
+						cfg->session_expiry_interval = UINT32_MAX;
+					}
+				}
 			}
 			i++;
 		}else{
@@ -1183,6 +1257,9 @@ int client_opts_set(struct mosquitto *mosq, struct mosq_config *cfg)
 		}
 	}
 #endif
+	if(cfg->tcp_nodelay){
+		mosquitto_int_option(mosq, MOSQ_OPT_TCP_NODELAY, 1);
+	}
 	return MOSQ_ERR_SUCCESS;
 }
 
@@ -1210,7 +1287,7 @@ int client_connect(struct mosquitto *mosq, struct mosq_config *cfg)
 	int rc;
 	int port;
 
-	if(cfg->port < 0){
+	if(cfg->port == PORT_UNDEFINED){
 #ifdef WITH_TLS
 		if(cfg->cafile || cfg->capath
 #  ifdef FINAL_WITH_TLS_PSK

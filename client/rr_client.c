@@ -35,6 +35,7 @@ Contributors:
 #include <mqtt_protocol.h>
 #include "client_shared.h"
 #include "pub_shared.h"
+#include "sub_client_output.h"
 
 enum rr__state {
 	rr_s_new,
@@ -52,6 +53,7 @@ extern struct mosq_config cfg;
 bool process_messages = true;
 int msg_count = 0;
 struct mosquitto *mosq = NULL;
+static bool timed_out = false;
 
 #ifndef WIN32
 void my_signal_handler(int signum)
@@ -59,11 +61,10 @@ void my_signal_handler(int signum)
 	if(signum == SIGALRM){
 		process_messages = false;
 		mosquitto_disconnect_v5(mosq, MQTT_RC_DISCONNECT_WITH_WILL_MSG, cfg.disconnect_props);
+		timed_out = true;
 	}
 }
 #endif
-
-void print_message(struct mosq_config *cfg, const struct mosquitto_message *message);
 
 
 int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadlen, void *payload, int qos, bool retain)
@@ -74,7 +75,7 @@ int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadl
 
 void my_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message, const mosquitto_property *properties)
 {
-	print_message(&cfg, message);
+	print_message(&cfg, message, properties);
 	switch(cfg.pub_mode){
 		case MSGMODE_CMD:
 		case MSGMODE_FILE:
@@ -161,16 +162,16 @@ void print_usage(void)
 	printf("             Defaults to MQTT v5, where the Request-Response feature will be used, but v3.1.1 can also be used\n");
 	printf("             with v3.1.1 brokers.\n");
 	printf("mosquitto_rr version %s running on libmosquitto %d.%d.%d.\n\n", VERSION, major, minor, revision);
-	printf("Usage: mosquitto_rr {[-h host] [-p port] [-u username] [-P password] -t topic | -L URL} -e response-topic\n");
-	printf("                    [-c] [-k keepalive] [-q qos] [-R]\n");
+	printf("Usage: mosquitto_rr {[-h host] [--unix path] [-p port] [-u username] [-P password] -t topic | -L URL} -e response-topic\n");
+	printf("                    [-c] [-k keepalive] [-q qos] [-R] [-x session-expiry-interval\n");
 	printf("                    [-F format]\n");
 #ifndef WIN32
 	printf("                    [-W timeout_secs]\n");
 #endif
 #ifdef WITH_SRV
-	printf("                    [-A bind_address] [-S]\n");
+	printf("                    [-A bind_address] [--nodelay] [-S]\n");
 #else
-	printf("                    [-A bind_address]\n");
+	printf("                    [-A bind_address] [--nodelay]\n");
 #endif
 	printf("                    [-i id] [-I id_prefix]\n");
 	printf("                    [-d] [-N] [--quiet] [-v]\n");
@@ -191,7 +192,11 @@ void print_usage(void)
 	printf("       mosquitto_rr --help\n\n");
 	printf(" -A : bind the outgoing socket to this host/ip address. Use to control which interface\n");
 	printf("      the client communicates over.\n");
-	printf(" -c : disable 'clean session' (store subscription and pending messages when client disconnects).\n");
+	printf(" -c : disable clean session/enable persistent client mode\n");
+	printf("      When this argument is used, the broker will be instructed not to clean existing sessions\n");
+	printf("      for the same client id when the client connects, and sessions will never expire when the\n");
+	printf("      client disconnects. MQTT v5 clients can change their session expiry interval with the -x\n");
+	printf("      argument.\n");
 	printf(" -d : enable debug messages.\n");
 	printf(" -D : Define MQTT v5 properties. See the documentation for more details.\n");
 	printf(" -F : output format.\n");
@@ -216,8 +221,18 @@ void print_usage(void)
 #ifndef WIN32
 	printf(" -W : Specifies a timeout in seconds how long to wait for a response.\n");
 #endif
+	printf(" -x : Set the session-expiry-interval property on the CONNECT packet. Applies to MQTT v5\n");
+	printf("      clients only. Set to 0-4294967294 to specify the session will expire in that many\n");
+	printf("      seconds after the client disconnects, or use -1, 4294967295, or ∞ for a session\n");
+	printf("      that does not expire. Defaults to -1 if -c is also given, or 0 if -c not given.\n");
 	printf(" --help : display this message.\n");
+	printf(" --nodelay : disable Nagle's algorithm, to reduce socket sending latency at the possible\n");
+	printf("             expense of more packets being sent.\n");
+	printf(" --pretty : print formatted output rather than minimised output when using the\n");
+	printf("            JSON output format option.\n");
 	printf(" --quiet : don't print error messages.\n");
+	printf(" --unix : connect to a broker through a unix domain socket instead of a TCP socket,\n");
+	printf("          e.g. /tmp/mosquitto.sock\n");
 	printf(" --will-payload : payload for the client Will, which is sent by the broker in case of\n");
 	printf("                  unexpected disconnection. If not given and will-topic is set, a zero\n");
 	printf("                  length message will be sent.\n");
@@ -360,7 +375,10 @@ int main(int argc, char *argv[])
 		rc = 0;
 	}
 	client_config_cleanup(&cfg);
-	if(rc){
+	if(timed_out){
+		err_printf(&cfg, "Timed out\n");
+		return MOSQ_ERR_TIMEOUT;
+	}else if(rc){
 		err_printf(&cfg, "Error: %s\n", mosquitto_strerror(rc));
 	}
 	return rc;

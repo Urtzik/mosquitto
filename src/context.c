@@ -52,6 +52,7 @@ struct mosquitto *context__init(struct mosquitto_db *db, mosq_sock_t sock)
 	context->password = NULL;
 	context->listener = NULL;
 	context->acl_list = NULL;
+	context->retain_available = true;
 
 	/* is_bridge records whether this client is a bridge or not. This could be
 	 * done by looking at context->bridge for bridges that we create ourself,
@@ -99,42 +100,16 @@ struct mosquitto *context__init(struct mosquitto_db *db, mosq_sock_t sock)
 void context__cleanup(struct mosquitto_db *db, struct mosquitto *context, bool do_free)
 {
 	struct mosquitto__packet *packet;
-#ifdef WITH_BRIDGE
-	int i;
-#endif
 
 	if(!context) return;
 
+	if(do_free){
+		context->clean_start = true;
+	}
+
 #ifdef WITH_BRIDGE
 	if(context->bridge){
-		for(i=0; i<db->bridge_count; i++){
-			if(db->bridges[i] == context){
-				db->bridges[i] = NULL;
-			}
-		}
-		mosquitto__free(context->bridge->local_clientid);
-		context->bridge->local_clientid = NULL;
-
-		mosquitto__free(context->bridge->local_username);
-		context->bridge->local_username = NULL;
-
-		mosquitto__free(context->bridge->local_password);
-		context->bridge->local_password = NULL;
-
-		if(context->bridge->remote_clientid != context->id){
-			mosquitto__free(context->bridge->remote_clientid);
-		}
-		context->bridge->remote_clientid = NULL;
-
-		if(context->bridge->remote_username != context->username){
-			mosquitto__free(context->bridge->remote_username);
-		}
-		context->bridge->remote_username = NULL;
-
-		if(context->bridge->remote_password != context->password){
-			mosquitto__free(context->bridge->remote_password);
-		}
-		context->bridge->remote_password = NULL;
+		bridge__cleanup(db, context);
 	}
 #endif
 
@@ -150,10 +125,10 @@ void context__cleanup(struct mosquitto_db *db, struct mosquitto *context, bool d
 	context->password = NULL;
 
 	net__socket_close(db, context);
-	if(do_free || context->clean_start){
+	if(do_free){
 		sub__clean_session(db, context);
-		db__messages_delete(db, context);
 	}
+	db__messages_delete(db, context);
 
 	mosquitto__free(context->address);
 	context->address = NULL;
@@ -176,9 +151,6 @@ void context__cleanup(struct mosquitto_db *db, struct mosquitto *context, bool d
 		packet = context->out_packet;
 		context->out_packet = context->out_packet->next;
 		mosquitto__free(packet);
-	}
-	if(do_free || context->clean_start){
-		db__messages_delete(db, context);
 	}
 #if defined(WITH_BROKER) && defined(__GLIBC__) && defined(WITH_ADNS)
 	if(context->adns){
@@ -236,10 +208,9 @@ void context__disconnect(struct mosquitto_db *db, struct mosquitto *context)
 	if(context->session_expiry_interval == 0){
 		/* Client session is due to be expired now */
 #ifdef WITH_BRIDGE
-		if(!context->bridge)
+		if(context->bridge == NULL)
 #endif
 		{
-
 			if(context->will_delay_interval == 0){
 				/* This will be done later, after the will is published for delay>0. */
 				context__add_to_disused(db, context);
